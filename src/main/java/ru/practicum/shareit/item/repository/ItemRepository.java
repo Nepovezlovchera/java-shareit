@@ -7,8 +7,12 @@ import java.util.Optional;
 
 public interface ItemRepository {
     List<Item> findAllByOwnerId(Long ownerId);
+
     Optional<Item> findById(Long id);
+
     Item save(Item item);
+
     Item update(Item item);
+
     List<Item> search(String text);
 }
