@@ -3,10 +3,7 @@ package ru.practicum.shareit.item.repository;
 import org.springframework.stereotype.Repository;
 import ru.practicum.shareit.item.model.Item;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -14,13 +11,12 @@ import java.util.stream.Collectors;
 public class InMemoryItemRepository implements ItemRepository {
 
     private final Map<Long, Item> items = new HashMap<>();
+    private final Map<Long, List<Item>> itemsByOwner = new HashMap<>();
     private final AtomicLong idCounter = new AtomicLong(0);
 
     @Override
     public List<Item> findAllByOwnerId(Long ownerId) {
-        return items.values().stream()
-                .filter(item -> item.getOwner().getId().equals(ownerId))
-                .collect(Collectors.toList());
+        return new ArrayList<>(itemsByOwner.getOrDefault(ownerId, List.of()));
     }
 
     @Override
@@ -32,6 +28,7 @@ public class InMemoryItemRepository implements ItemRepository {
     public Item save(Item item) {
         item.setId(idCounter.incrementAndGet());
         items.put(item.getId(), item);
+        itemsByOwner.computeIfAbsent(item.getOwner().getId(), k -> new ArrayList<>()).add(item);
         return item;
     }
 
@@ -43,9 +40,6 @@ public class InMemoryItemRepository implements ItemRepository {
 
     @Override
     public List<Item> search(String text) {
-        if (text == null || text.isBlank()) {
-            return List.of();
-        }
         String lower = text.toLowerCase();
         return items.values().stream()
                 .filter(item -> Boolean.TRUE.equals(item.getAvailable()))

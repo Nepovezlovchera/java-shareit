@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class InMemoryUserRepository implements UserRepository {
 
     private final Map<Long, User> users = new HashMap<>();
+    private final Map<String, Long> emailToUserId = new HashMap<>();
     private final AtomicLong idCounter = new AtomicLong(0);
 
     @Override
@@ -21,6 +22,7 @@ public class InMemoryUserRepository implements UserRepository {
     public User save(User user) {
         user.setId(idCounter.incrementAndGet());
         users.put(user.getId(), user);
+        emailToUserId.put(user.getEmail().toLowerCase(), user.getId());
         return user;
     }
 
@@ -42,8 +44,7 @@ public class InMemoryUserRepository implements UserRepository {
 
     @Override
     public boolean existsByEmail(String email, Long excludeUserId) {
-        return users.values().stream()
-                .anyMatch(u -> u.getEmail().equalsIgnoreCase(email) && !u.getId().equals(excludeUserId));
+        Long ownerId = emailToUserId.get(email.toLowerCase());
+        return ownerId != null && !ownerId.equals(excludeUserId);
     }
-
 }

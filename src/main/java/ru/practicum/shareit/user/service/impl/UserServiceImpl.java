@@ -2,6 +2,7 @@ package ru.practicum.shareit.user.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import ru.practicum.shareit.exception.DuplicateEmailException;
 import ru.practicum.shareit.exception.NotFoundException;
 import ru.practicum.shareit.exception.ValidationException;
 import ru.practicum.shareit.user.model.User;
@@ -32,7 +33,7 @@ public class UserServiceImpl implements UserService {
             throw new ValidationException("Email не может быть пустым");
         }
         if (repository.existsByEmail(user.getEmail(), null)) {
-            throw new ValidationException("Пользователь с таким email уже существует");
+            throw new DuplicateEmailException("Пользователь с таким email уже существует");
         }
         return repository.save(user);
     }
@@ -43,7 +44,7 @@ public class UserServiceImpl implements UserService {
 
         if (user.getEmail() != null && !user.getEmail().isBlank()) {
             if (repository.existsByEmail(user.getEmail(), userId)) {
-                throw new ValidationException("Пользователь с таким email уже существует");
+                throw new DuplicateEmailException("Пользователь с таким email уже существует");
             }
             existing.setEmail(user.getEmail());
         }
@@ -55,7 +56,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void deleteUser(Long userId) {
-        getUserById(userId); // бросит NotFoundException, если пользователя нет
+        getUserById(userId);
         repository.delete(userId);
     }
 }

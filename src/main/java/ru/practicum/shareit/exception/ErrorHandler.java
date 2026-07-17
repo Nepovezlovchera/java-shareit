@@ -38,4 +38,10 @@ public class ErrorHandler {
     public ErrorResponse handleForbidden(final ForbiddenException e) {
         return new ErrorResponse(e.getMessage());
     }
+
+    @ExceptionHandler
+    @ResponseStatus(HttpStatus.CONFLICT) // 409
+    public ErrorResponse handleDuplicateEmail(final DuplicateEmailException e) {
+        return new ErrorResponse(e.getMessage());
+    }
 }
