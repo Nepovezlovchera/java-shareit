@@ -4,12 +4,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.practicum.shareit.booking.model.Booking;
 import ru.practicum.shareit.booking.repository.BookingRepository;
+import ru.practicum.shareit.booking.status.Status;
 import ru.practicum.shareit.comment.dto.CommentDto;
 import ru.practicum.shareit.comment.mapper.CommentMapper;
 import ru.practicum.shareit.comment.model.Comment;
 import ru.practicum.shareit.comment.reposytory.CommentRepository;
 import ru.practicum.shareit.exception.NotFoundException;
+import ru.practicum.shareit.exception.ValidationException;
 import ru.practicum.shareit.item.dto.ItemWithBookingsDto;
+import ru.practicum.shareit.item.mapper.ItemMapper;
 import ru.practicum.shareit.item.model.Item;
 import ru.practicum.shareit.item.repository.ItemRepository;
 import ru.practicum.shareit.item.service.ItemService;
@@ -23,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+
 @Service
 @RequiredArgsConstructor
 public class ItemServiceImpl implements ItemService {
@@ -31,7 +35,6 @@ public class ItemServiceImpl implements ItemService {
     private final UserRepository userRepository;
     private final BookingRepository bookingRepository;
     private final CommentRepository commentRepository;
-    private final ItemValidator validator;
 
     @Override
     public Item createItem(Long ownerId, Item item) {
@@ -46,7 +49,7 @@ public class ItemServiceImpl implements ItemService {
     public Item updateItem(Long ownerId, Long itemId, Item item) {
         Item existing = getItemById(itemId);
 
-        validator.validateOwner(existing, ownerId);
+        ItemValidator.validateOwner(existing, ownerId);
 
         if (item.getName() != null && !item.getName().isBlank()) {
             existing.setName(item.getName());
@@ -84,13 +87,9 @@ public class ItemServiceImpl implements ItemService {
 
         Item item = getItemById(itemId);
 
-        validator.validateHasCompletedBooking(authorId, itemId);
+        validateHasCompletedBooking(authorId, itemId);
 
-        Comment comment = new Comment();
-        comment.setText(text);
-        comment.setItem(item);
-        comment.setAuthor(author);
-        comment.setCreated(LocalDateTime.now());
+        Comment comment = CommentMapper.toComment(text, item, author);
 
         Comment saved = commentRepository.save(comment);
         return CommentMapper.toCommentDto(saved);
@@ -107,24 +106,15 @@ public class ItemServiceImpl implements ItemService {
             List<Booking> bookings = bookingRepository.findByItem_IdOrderByStartAsc(itemId);
             LocalDateTime now = LocalDateTime.now();
 
-            lastBooking = bookings.stream()
-                    .filter(b -> b.getStart().isBefore(now))
-                    .max(Comparator.comparing(Booking::getStart))
-                    .map(Booking::getStart)
-                    .orElse(null);
-
-            nextBooking = bookings.stream()
-                    .filter(b -> b.getStart().isAfter(now))
-                    .min(Comparator.comparing(Booking::getStart))
-                    .map(Booking::getStart)
-                    .orElse(null);
+            lastBooking = findLastBookingStart(bookings, now);
+            nextBooking = findNextBookingStart(bookings, now);
         }
 
         List<CommentDto> comments = commentRepository.findByItem_Id(itemId).stream()
                 .map(CommentMapper::toCommentDto)
                 .collect(Collectors.toList());
 
-        return toItemWithBookingsDto(item, lastBooking, nextBooking, comments);
+        return ItemMapper.toItemWithBookingsDto(item, lastBooking, nextBooking, comments);
     }
 
     @Override
@@ -153,36 +143,42 @@ public class ItemServiceImpl implements ItemService {
                 .map(item -> {
                     List<Booking> bookings = bookingsByItemId.getOrDefault(item.getId(), List.of());
 
-                    LocalDateTime last = bookings.stream()
-                            .filter(b -> b.getStart().isBefore(now))
-                            .max(Comparator.comparing(Booking::getStart))
-                            .map(Booking::getStart)
-                            .orElse(null);
-
-                    LocalDateTime next = bookings.stream()
-                            .filter(b -> b.getStart().isAfter(now))
-                            .min(Comparator.comparing(Booking::getStart))
-                            .map(Booking::getStart)
-                            .orElse(null);
+                    LocalDateTime last = findLastBookingStart(bookings, now);
+                    LocalDateTime next = findNextBookingStart(bookings, now);
 
                     List<CommentDto> comments = commentsByItemId.getOrDefault(item.getId(), List.of());
 
-                    return toItemWithBookingsDto(item, last, next, comments);
+                    return ItemMapper.toItemWithBookingsDto(item, last, next, comments);
                 })
                 .collect(Collectors.toList());
     }
 
-    private ItemWithBookingsDto toItemWithBookingsDto(Item item, LocalDateTime last, LocalDateTime next,
-                                                      List<CommentDto> comments) {
-        ItemWithBookingsDto dto = new ItemWithBookingsDto();
-        dto.setId(item.getId());
-        dto.setName(item.getName());
-        dto.setDescription(item.getDescription());
-        dto.setAvailable(item.getAvailable());
-        dto.setRequestId(item.getRequest() != null ? item.getRequest().getId() : null);
-        dto.setLastBooking(last);
-        dto.setNextBooking(next);
-        dto.setComments(comments);
-        return dto;
+    private LocalDateTime findLastBookingStart(List<Booking> bookings, LocalDateTime now) {
+        return bookings.stream()
+                .filter(b -> b.getStart().isBefore(now))
+                .max(Comparator.comparing(Booking::getStart))
+                .map(Booking::getStart)
+                .orElse(null);
+    }
+
+    private LocalDateTime findNextBookingStart(List<Booking> bookings, LocalDateTime now) {
+        return bookings.stream()
+                .filter(b -> b.getStart().isAfter(now))
+                .min(Comparator.comparing(Booking::getStart))
+                .map(Booking::getStart)
+                .orElse(null);
+    }
+
+    private void validateHasCompletedBooking(Long authorId, Long itemId) {
+        boolean hasCompletedBooking = bookingRepository
+                .findByBooker_IdAndItem_IdAndEndBeforeAndStatus(
+                        authorId, itemId, LocalDateTime.now(), Status.APPROVED)
+                .stream()
+                .findAny()
+                .isPresent();
+
+        if (!hasCompletedBooking) {
+            throw new ValidationException("Оставить отзыв может только пользователь, завершивший аренду этой вещи");
+        }
     }
 }

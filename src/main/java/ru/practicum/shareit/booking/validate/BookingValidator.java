@@ -1,6 +1,5 @@
 package ru.practicum.shareit.booking.validate;
 
-import org.springframework.stereotype.Component;
 import ru.practicum.shareit.booking.model.Booking;
 import ru.practicum.shareit.booking.status.BookingState;
 import ru.practicum.shareit.booking.status.Status;
@@ -9,10 +8,9 @@ import ru.practicum.shareit.exception.NotFoundException;
 import ru.practicum.shareit.exception.ValidationException;
 import ru.practicum.shareit.item.model.Item;
 
-@Component
 public class BookingValidator {
 
-    public void validateForCreate(Item item, Booking booking, Long bookerId) {
+    public static void validateForCreate(Item item, Booking booking, Long bookerId) {
         if (!Boolean.TRUE.equals(item.getAvailable())) {
             throw new ValidationException("Вещь недоступна для бронирования");
         }
@@ -24,7 +22,7 @@ public class BookingValidator {
         }
     }
 
-    public void validateForApprove(Booking booking, Long ownerId) {
+    public static void validateForApprove(Booking booking, Long ownerId) {
         if (!booking.getItem().getOwner().getId().equals(ownerId)) {
             throw new ForbiddenException("Подтверждать бронирование может только владелец вещи");
         }
@@ -33,7 +31,7 @@ public class BookingValidator {
         }
     }
 
-    public void validateAccessToBooking(Booking booking, Long userId) {
+    public static void validateAccessToBooking(Booking booking, Long userId) {
         boolean isBooker = booking.getBooker().getId().equals(userId);
         boolean isOwner = booking.getItem().getOwner().getId().equals(userId);
 
@@ -42,11 +40,4 @@ public class BookingValidator {
         }
     }
 
-    public BookingState parseState(String state) {
-        try {
-            return BookingState.valueOf(state);
-        } catch (IllegalArgumentException e) {
-            throw new ValidationException("Unknown state: " + state);
-        }
-    }
 }

@@ -2,6 +2,7 @@ package ru.practicum.shareit.booking.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import ru.practicum.shareit.booking.BookingFetcher;
 import ru.practicum.shareit.booking.model.Booking;
 import ru.practicum.shareit.booking.repository.BookingRepository;
 import ru.practicum.shareit.booking.service.BookingService;
@@ -9,6 +10,7 @@ import ru.practicum.shareit.booking.status.BookingState;
 import ru.practicum.shareit.booking.status.Status;
 import ru.practicum.shareit.booking.validate.BookingValidator;
 import ru.practicum.shareit.exception.NotFoundException;
+import ru.practicum.shareit.exception.ValidationException;
 import ru.practicum.shareit.item.model.Item;
 import ru.practicum.shareit.item.repository.ItemRepository;
 import ru.practicum.shareit.user.model.User;
@@ -24,7 +26,6 @@ public class BookingServiceImpl implements BookingService {
     private final BookingRepository bookingRepository;
     private final ItemRepository itemRepository;
     private final UserRepository userRepository;
-    private final BookingValidator validator;
 
     @Override
     public Booking create(Long bookerId, Long itemId, Booking booking) {
@@ -34,7 +35,13 @@ public class BookingServiceImpl implements BookingService {
         Item item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new NotFoundException("Вещь с id=" + itemId + " не найдена"));
 
-        validator.validateForCreate(item, booking, bookerId);
+        BookingValidator.validateForCreate(item, booking, bookerId);
+
+        List<Booking> conflicts = bookingRepository.findConflictingBookings(
+                itemId, booking.getStart(), booking.getEnd());
+        if (!conflicts.isEmpty()) {
+            throw new ValidationException("Вещь уже забронирована на выбранные даты");
+        }
 
         booking.setItem(item);
         booking.setBooker(booker);
@@ -47,7 +54,7 @@ public class BookingServiceImpl implements BookingService {
     public Booking approve(Long ownerId, Long bookingId, boolean approved) {
         Booking booking = getBookingOrThrow(bookingId);
 
-        validator.validateForApprove(booking, ownerId);
+        BookingValidator.validateForApprove(booking, ownerId);
 
         booking.setStatus(approved ? Status.APPROVED : Status.REJECTED);
         return bookingRepository.save(booking);
@@ -57,7 +64,7 @@ public class BookingServiceImpl implements BookingService {
     public Booking getById(Long userId, Long bookingId) {
         Booking booking = getBookingOrThrow(bookingId);
 
-        validator.validateAccessToBooking(booking, userId);
+        BookingValidator.validateAccessToBooking(booking, userId);
 
         return booking;
     }
@@ -67,16 +74,34 @@ public class BookingServiceImpl implements BookingService {
         userRepository.findById(bookerId)
                 .orElseThrow(() -> new NotFoundException("Пользователь с id=" + bookerId + " не найден"));
 
-        BookingState state = validator.parseState(stateParam);
-        LocalDateTime now = LocalDateTime.now();
-        return switch (state) {
-            case CURRENT -> bookingRepository.findByBooker_IdAndStartBeforeAndEndAfterOrderByStartDesc(bookerId, now, now);
-            case PAST -> bookingRepository.findByBooker_IdAndEndBeforeOrderByStartDesc(bookerId, now);
-            case FUTURE -> bookingRepository.findByBooker_IdAndStartAfterOrderByStartDesc(bookerId, now);
-            case WAITING -> bookingRepository.findByBooker_IdAndStatusOrderByStartDesc(bookerId, Status.WAITING);
-            case REJECTED -> bookingRepository.findByBooker_IdAndStatusOrderByStartDesc(bookerId, Status.REJECTED);
-            case ALL -> bookingRepository.findByBooker_IdOrderByStartDesc(bookerId);
-        };
+        BookingState state = BookingState.parseState(stateParam);
+
+        return BookingFetcher.getBookingsByState(state, new BookingFetcher() {
+            @Override
+            public List<Booking> all() {
+                return bookingRepository.findByBooker_IdOrderByStartDesc(bookerId);
+            }
+
+            @Override
+            public List<Booking> current(LocalDateTime now) {
+                return bookingRepository.findByBooker_IdAndStartBeforeAndEndAfterOrderByStartDesc(bookerId, now, now);
+            }
+
+            @Override
+            public List<Booking> past(LocalDateTime now) {
+                return bookingRepository.findByBooker_IdAndEndBeforeOrderByStartDesc(bookerId, now);
+            }
+
+            @Override
+            public List<Booking> future(LocalDateTime now) {
+                return bookingRepository.findByBooker_IdAndStartAfterOrderByStartDesc(bookerId, now);
+            }
+
+            @Override
+            public List<Booking> byStatus(Status status) {
+                return bookingRepository.findByBooker_IdAndStatusOrderByStartDesc(bookerId, status);
+            }
+        });
     }
 
     @Override
@@ -84,22 +109,39 @@ public class BookingServiceImpl implements BookingService {
         userRepository.findById(ownerId)
                 .orElseThrow(() -> new NotFoundException("Пользователь с id=" + ownerId + " не найден"));
 
-        BookingState state = validator.parseState(stateParam);
-        LocalDateTime now = LocalDateTime.now();
-        return switch (state) {
-            case CURRENT -> bookingRepository.findByItem_Owner_IdAndStartBeforeAndEndAfterOrderByStartDesc(ownerId, now, now);
-            case PAST -> bookingRepository.findByItem_Owner_IdAndEndBeforeOrderByStartDesc(ownerId, now);
-            case FUTURE -> bookingRepository.findByItem_Owner_IdAndStartAfterOrderByStartDesc(ownerId, now);
-            case WAITING -> bookingRepository.findByItem_Owner_IdAndStatusOrderByStartDesc(ownerId, Status.WAITING);
-            case REJECTED -> bookingRepository.findByItem_Owner_IdAndStatusOrderByStartDesc(ownerId, Status.REJECTED);
-            case ALL -> bookingRepository.findByItem_Owner_IdOrderByStartDesc(ownerId);
-        };
+        BookingState state = BookingState.parseState(stateParam);
+
+        return BookingFetcher.getBookingsByState(state, new BookingFetcher() {
+            @Override
+            public List<Booking> all() {
+                return bookingRepository.findByItem_Owner_IdOrderByStartDesc(ownerId);
+            }
+
+            @Override
+            public List<Booking> current(LocalDateTime now) {
+                return bookingRepository.findByItem_Owner_IdAndStartBeforeAndEndAfterOrderByStartDesc(ownerId, now, now);
+            }
+
+            @Override
+            public List<Booking> past(LocalDateTime now) {
+                return bookingRepository.findByItem_Owner_IdAndEndBeforeOrderByStartDesc(ownerId, now);
+            }
+
+            @Override
+            public List<Booking> future(LocalDateTime now) {
+                return bookingRepository.findByItem_Owner_IdAndStartAfterOrderByStartDesc(ownerId, now);
+            }
+
+            @Override
+            public List<Booking> byStatus(Status status) {
+                return bookingRepository.findByItem_Owner_IdAndStatusOrderByStartDesc(ownerId, status);
+            }
+        });
     }
 
     private Booking getBookingOrThrow(Long bookingId) {
         return bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new NotFoundException("Бронирование с id=" + bookingId + " не найдено"));
     }
-
 
 }

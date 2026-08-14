@@ -24,10 +24,7 @@ public class BookingController {
     @PostMapping
     public BookingDto create(@RequestHeader(USER_ID_HEADER) Long bookerId,
                              @Valid @RequestBody BookingRequestDto requestDto) {
-        Booking booking = new Booking();
-        booking.setStart(requestDto.getStart());
-        booking.setEnd(requestDto.getEnd());
-
+        Booking booking = BookingMapper.toBooking(requestDto);
         Booking created = bookingService.create(bookerId, requestDto.getItemId(), booking);
         return BookingMapper.toBookingDto(created);
     }
