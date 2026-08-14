@@ -9,9 +9,13 @@ import java.util.List;
 
 public interface BookingFetcher {
     List<Booking> all();
+
     List<Booking> current(LocalDateTime now);
+
     List<Booking> past(LocalDateTime now);
+
     List<Booking> future(LocalDateTime now);
+
     List<Booking> byStatus(Status status);
 
     static List<Booking> getBookingsByState(BookingState state, BookingFetcher fetcher) {

@@ -1,7 +1,6 @@
 package ru.practicum.shareit.booking.validate;
 
 import ru.practicum.shareit.booking.model.Booking;
-import ru.practicum.shareit.booking.status.BookingState;
 import ru.practicum.shareit.booking.status.Status;
 import ru.practicum.shareit.exception.ForbiddenException;
 import ru.practicum.shareit.exception.NotFoundException;
