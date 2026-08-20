@@ -26,9 +26,7 @@ class CommentRequestDtoJsonTest {
     @Test
     void testDeserialize() throws Exception {
         String content = """
-                {
-                  "text": "Отличная вещь"
-                }
+                {"text": "Отличная вещь"}
                 """;
 
         CommentRequestDto dto = json.parseObject(content);
