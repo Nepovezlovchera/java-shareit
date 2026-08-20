@@ -32,7 +32,7 @@ public class UserServiceImpl implements UserService {
         if (user.getEmail() == null || user.getEmail().isBlank()) {
             throw new ValidationException("Email не может быть пустым");
         }
-        if (repository.existsByEmail(user.getEmail(), null)) {
+        if (repository.existsByEmailAndIdNot(user.getEmail(), null)) {
             throw new DuplicateEmailException("Пользователь с таким email уже существует");
         }
         return repository.save(user);
@@ -43,7 +43,7 @@ public class UserServiceImpl implements UserService {
         User existing = getUserById(userId);
 
         if (user.getEmail() != null && !user.getEmail().isBlank()) {
-            if (repository.existsByEmail(user.getEmail(), userId)) {
+            if (repository.existsByEmailAndIdNot(user.getEmail(), userId)) {
                 throw new DuplicateEmailException("Пользователь с таким email уже существует");
             }
             existing.setEmail(user.getEmail());
@@ -51,12 +51,12 @@ public class UserServiceImpl implements UserService {
         if (user.getName() != null && !user.getName().isBlank()) {
             existing.setName(user.getName());
         }
-        return repository.update(existing);
+        return repository.save(existing);
     }
 
     @Override
     public void deleteUser(Long userId) {
         getUserById(userId);
-        repository.delete(userId);
+        repository.deleteById(userId);
     }
 }
