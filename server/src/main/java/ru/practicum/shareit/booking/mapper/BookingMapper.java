@@ -9,6 +9,10 @@ import ru.practicum.shareit.user.dto.UserBookDto;
 public class BookingMapper {
 
     public static BookingDto toBookingDto(Booking booking) {
+        if (booking == null) {
+            return null;
+        }
+
         BookingDto dto = new BookingDto();
         dto.setId(booking.getId());
         dto.setStart(booking.getStart());
@@ -27,6 +31,10 @@ public class BookingMapper {
     }
 
     public static Booking toBooking(BookingRequestDto requestDto) {
+        if (requestDto == null) {
+            return null;
+        }
+
         Booking booking = new Booking();
         booking.setStart(requestDto.getStart());
         booking.setEnd(requestDto.getEnd());
