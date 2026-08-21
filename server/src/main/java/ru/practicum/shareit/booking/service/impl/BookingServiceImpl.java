@@ -31,36 +31,27 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     public Booking create(Long bookerId, Long itemId, Booking booking) {
-        log.info("=== CREATE BOOKING SERVICE: bookerId={}, itemId={}, start={}, end={}",
-                bookerId, itemId, booking.getStart(), booking.getEnd());
+        log.info("=== CREATE: bookerId={}, itemId={}", bookerId, itemId);
 
         User booker = userRepository.findById(bookerId)
                 .orElseThrow(() -> new NotFoundException("Пользователь с id=" + bookerId + " не найден"));
-        log.info("=== BOOKER FOUND: id={}, name={}", booker.getId(), booker.getName());
 
         Item item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new NotFoundException("Вещь с id=" + itemId + " не найдена"));
-        log.info("=== ITEM FOUND: id={}, name={}, ownerId={}", item.getId(), item.getName(), item.getOwner().getId());
 
         BookingValidator.validateForCreate(item, booking, bookerId);
-        log.info("=== VALIDATION PASSED");
 
         List<Booking> conflicts = bookingRepository.findConflictingBookings(
                 itemId, booking.getStart(), booking.getEnd());
         if (!conflicts.isEmpty()) {
             throw new ValidationException("Вещь уже забронирована на выбранные даты");
         }
-        log.info("=== NO CONFLICTS");
 
         booking.setItem(item);
         booking.setBooker(booker);
         booking.setStatus(Status.WAITING);
-        log.info("=== BOOKING READY TO SAVE: itemId={}, bookerId={}, status={}",
-                booking.getItem().getId(), booking.getBooker().getId(), booking.getStatus());
 
-        Booking saved = bookingRepository.save(booking);
-        log.info("=== BOOKING SAVED: id={}", saved.getId());
-        return saved;
+        return bookingRepository.save(booking);
     }
 
     @Override
