@@ -1,18 +1,19 @@
-package ru.practicum.shareit.booking.service;
+package ru.practicum.shareit.book.service;
 
+import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.shareit.booking.model.Booking;
+import ru.practicum.shareit.booking.service.BookingService;
 import ru.practicum.shareit.booking.status.Status;
 import ru.practicum.shareit.exception.ForbiddenException;
 import ru.practicum.shareit.exception.NotFoundException;
 import ru.practicum.shareit.exception.ValidationException;
 import ru.practicum.shareit.item.model.Item;
-import ru.practicum.shareit.item.service.ItemService;
 import ru.practicum.shareit.user.model.User;
-import ru.practicum.shareit.user.service.UserService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,17 +29,21 @@ class BookingServiceImplTest {
     private BookingService bookingService;
 
     @Autowired
-    private ItemService itemService;
+    private EntityManager em;
 
-    @Autowired
-    private UserService userService;
+    private User owner;
+    private User booker;
+    private Item item;
+
+    @BeforeEach
+    void setUp() {
+        owner = persistUser("owner@example.com");
+        booker = persistUser("booker@example.com");
+        item = persistItem(owner, "Дрель", true);
+    }
 
     @Test
     void create_shouldPersistBookingWithWaitingStatus() {
-        User owner = createUser("owner1@example.com");
-        User booker = createUser("booker1@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-
         Booking booking = newBooking(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
         Booking created = bookingService.create(booker.getId(), item.getId(), booking);
 
@@ -50,21 +55,15 @@ class BookingServiceImplTest {
 
     @Test
     void create_withUnavailableItem_shouldThrowValidationException() {
-        User owner = createUser("owner2@example.com");
-        User booker = createUser("booker2@example.com");
-        Item item = createItem(owner.getId(), "Дрель", false);
-
+        Item unavailable = persistItem(owner, "Молоток", false);
         Booking booking = newBooking(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 
-        assertThatThrownBy(() -> bookingService.create(booker.getId(), item.getId(), booking))
+        assertThatThrownBy(() -> bookingService.create(booker.getId(), unavailable.getId(), booking))
                 .isInstanceOf(ValidationException.class);
     }
 
     @Test
     void create_byOwnerHimself_shouldThrowNotFoundException() {
-        User owner = createUser("owner3@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-
         Booking booking = newBooking(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 
         assertThatThrownBy(() -> bookingService.create(owner.getId(), item.getId(), booking))
@@ -73,10 +72,6 @@ class BookingServiceImplTest {
 
     @Test
     void create_withEndBeforeStart_shouldThrowValidationException() {
-        User owner = createUser("owner4@example.com");
-        User booker = createUser("booker4@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-
         Booking booking = newBooking(LocalDateTime.now().plusDays(2), LocalDateTime.now().plusDays(1));
 
         assertThatThrownBy(() -> bookingService.create(booker.getId(), item.getId(), booking))
@@ -85,10 +80,6 @@ class BookingServiceImplTest {
 
     @Test
     void create_withConflictingDates_shouldThrowValidationException() {
-        User owner = createUser("owner5@example.com");
-        User booker = createUser("booker5@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-
         LocalDateTime start = LocalDateTime.now().plusDays(1);
         LocalDateTime end = LocalDateTime.now().plusDays(3);
         bookingService.create(booker.getId(), item.getId(), newBooking(start, end));
@@ -101,10 +92,7 @@ class BookingServiceImplTest {
 
     @Test
     void approve_byOwner_shouldSetApprovedStatus() {
-        User owner = createUser("owner6@example.com");
-        User booker = createUser("booker6@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        Booking saved = createBooking(booker.getId(), item.getId());
+        Booking saved = createBooking();
 
         Booking approved = bookingService.approve(owner.getId(), saved.getId(), true);
 
@@ -113,10 +101,7 @@ class BookingServiceImplTest {
 
     @Test
     void approve_withFalse_shouldSetRejectedStatus() {
-        User owner = createUser("owner7@example.com");
-        User booker = createUser("booker7@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        Booking saved = createBooking(booker.getId(), item.getId());
+        Booking saved = createBooking();
 
         Booking rejected = bookingService.approve(owner.getId(), saved.getId(), false);
 
@@ -125,11 +110,8 @@ class BookingServiceImplTest {
 
     @Test
     void approve_byNotOwner_shouldThrowForbiddenException() {
-        User owner = createUser("owner8@example.com");
-        User booker = createUser("booker8@example.com");
-        User stranger = createUser("stranger8@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        Booking saved = createBooking(booker.getId(), item.getId());
+        User stranger = persistUser("stranger@example.com");
+        Booking saved = createBooking();
 
         assertThatThrownBy(() -> bookingService.approve(stranger.getId(), saved.getId(), true))
                 .isInstanceOf(ForbiddenException.class);
@@ -137,10 +119,7 @@ class BookingServiceImplTest {
 
     @Test
     void approve_alreadyProcessed_shouldThrowValidationException() {
-        User owner = createUser("owner9@example.com");
-        User booker = createUser("booker9@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        Booking saved = createBooking(booker.getId(), item.getId());
+        Booking saved = createBooking();
         bookingService.approve(owner.getId(), saved.getId(), true);
 
         assertThatThrownBy(() -> bookingService.approve(owner.getId(), saved.getId(), false))
@@ -149,10 +128,7 @@ class BookingServiceImplTest {
 
     @Test
     void getById_byBooker_shouldReturnBooking() {
-        User owner = createUser("owner10@example.com");
-        User booker = createUser("booker10@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        Booking saved = createBooking(booker.getId(), item.getId());
+        Booking saved = createBooking();
 
         Booking found = bookingService.getById(booker.getId(), saved.getId());
 
@@ -161,10 +137,7 @@ class BookingServiceImplTest {
 
     @Test
     void getById_byOwner_shouldReturnBooking() {
-        User owner = createUser("owner11@example.com");
-        User booker = createUser("booker11@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        Booking saved = createBooking(booker.getId(), item.getId());
+        Booking saved = createBooking();
 
         Booking found = bookingService.getById(owner.getId(), saved.getId());
 
@@ -173,11 +146,8 @@ class BookingServiceImplTest {
 
     @Test
     void getById_byStranger_shouldThrowNotFoundException() {
-        User owner = createUser("owner12@example.com");
-        User booker = createUser("booker12@example.com");
-        User stranger = createUser("stranger12@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        Booking saved = createBooking(booker.getId(), item.getId());
+        User stranger = persistUser("stranger2@example.com");
+        Booking saved = createBooking();
 
         assertThatThrownBy(() -> bookingService.getById(stranger.getId(), saved.getId()))
                 .isInstanceOf(NotFoundException.class);
@@ -185,18 +155,13 @@ class BookingServiceImplTest {
 
     @Test
     void getById_withNonExistentId_shouldThrowNotFoundException() {
-        User user = createUser("user13@example.com");
-
-        assertThatThrownBy(() -> bookingService.getById(user.getId(), 999L))
+        assertThatThrownBy(() -> bookingService.getById(booker.getId(), 999L))
                 .isInstanceOf(NotFoundException.class);
     }
 
     @Test
     void getAllByBooker_withStateAll_shouldReturnAllBookings() {
-        User owner = createUser("owner14@example.com");
-        User booker = createUser("booker14@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        createBooking(booker.getId(), item.getId());
+        createBooking();
 
         List<Booking> bookings = bookingService.getAllByBooker(booker.getId(), "ALL");
 
@@ -205,10 +170,7 @@ class BookingServiceImplTest {
 
     @Test
     void getAllByBooker_withStateWaiting_shouldReturnOnlyWaiting() {
-        User owner = createUser("owner15@example.com");
-        User booker = createUser("booker15@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        Booking saved = createBooking(booker.getId(), item.getId());
+        Booking saved = createBooking();
         bookingService.approve(owner.getId(), saved.getId(), true);
 
         List<Booking> waiting = bookingService.getAllByBooker(booker.getId(), "WAITING");
@@ -218,37 +180,35 @@ class BookingServiceImplTest {
 
     @Test
     void getAllByBooker_withInvalidState_shouldThrowValidationException() {
-        User booker = createUser("booker16@example.com");
-
         assertThatThrownBy(() -> bookingService.getAllByBooker(booker.getId(), "UNKNOWN"))
                 .isInstanceOf(ValidationException.class);
     }
 
     @Test
     void getAllByOwner_withStateAll_shouldReturnAllBookingsForOwnerItems() {
-        User owner = createUser("owner17@example.com");
-        User booker = createUser("booker17@example.com");
-        Item item = createItem(owner.getId(), "Дрель", true);
-        createBooking(booker.getId(), item.getId());
+        createBooking();
 
         List<Booking> bookings = bookingService.getAllByOwner(owner.getId(), "ALL");
 
         assertThat(bookings).hasSize(1);
     }
 
-    private User createUser(String email) {
+    private User persistUser(String email) {
         User user = new User();
         user.setName("User " + email);
         user.setEmail(email);
-        return userService.saveUser(user);
+        em.persist(user);
+        return user;
     }
 
-    private Item createItem(Long ownerId, String name, boolean available) {
-        Item item = new Item();
-        item.setName(name);
-        item.setDescription("Описание " + name);
-        item.setAvailable(available);
-        return itemService.createItem(ownerId, item, null);
+    private Item persistItem(User itemOwner, String name, boolean available) {
+        Item newItem = new Item();
+        newItem.setName(name);
+        newItem.setDescription("Описание " + name);
+        newItem.setAvailable(available);
+        newItem.setOwner(itemOwner);
+        em.persist(newItem);
+        return newItem;
     }
 
     private Booking newBooking(LocalDateTime start, LocalDateTime end) {
@@ -258,9 +218,9 @@ class BookingServiceImplTest {
         return booking;
     }
 
-    private Booking createBooking(Long bookerId, Long itemId) {
+    private Booking createBooking() {
         LocalDateTime start = LocalDateTime.now().plusDays(1);
         LocalDateTime end = LocalDateTime.now().plusDays(2);
-        return bookingService.create(bookerId, itemId, newBooking(start, end));
+        return bookingService.create(booker.getId(), item.getId(), newBooking(start, end));
     }
 }
