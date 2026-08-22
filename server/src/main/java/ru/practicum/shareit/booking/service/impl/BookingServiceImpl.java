@@ -42,7 +42,7 @@ public class BookingServiceImpl implements BookingService {
         BookingValidator.validateForCreate(item, booking, bookerId);
 
         List<Booking> conflicts = bookingRepository.findConflictingBookings(
-                itemId, booking.getStart(), booking.getEnd());
+                itemId, booking.getStart(), booking.getEnd(), Status.REJECTED);
         if (!conflicts.isEmpty()) {
             throw new ValidationException("Вещь уже забронирована на выбранные даты");
         }

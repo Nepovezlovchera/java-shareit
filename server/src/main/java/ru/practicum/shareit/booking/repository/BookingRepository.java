@@ -2,6 +2,7 @@ package ru.practicum.shareit.booking.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import ru.practicum.shareit.booking.model.Booking;
 import ru.practicum.shareit.booking.status.Status;
 
@@ -40,9 +41,12 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             Long bookerId, Long itemId, LocalDateTime now, Status status);
 
     @Query("select b from Booking b " +
-            "where b.item.id = ?1 " +
-            "and b.status <> 'REJECTED' " +
-            "and b.start < ?3 " +
-            "and b.end > ?2")
-    List<Booking> findConflictingBookings(Long itemId, LocalDateTime start, LocalDateTime end);
+            "where b.item.id = :itemId " +
+            "and b.status != :rejectedStatus " +
+            "and b.start < :end " +
+            "and b.end > :start")
+    List<Booking> findConflictingBookings(@Param("itemId") Long itemId,
+                                          @Param("start") LocalDateTime start,
+                                          @Param("end") LocalDateTime end,
+                                          @Param("rejectedStatus") Status rejectedStatus);
 }
